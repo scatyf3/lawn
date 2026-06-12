@@ -2,17 +2,17 @@
 
 环境变量:
   NOTIFY_STDOUT=1   只打印,不推送(供轮询器用 Bot 回复)
-  EAGLE_REPO        覆盖仓库目录
 """
 import os
 import sys
 
-from . import config, status
+from . import config, projects, status
+from .commands import active_project
 from .telegram import Telegram, host_header
 
 
 def main():
-    report = status.build_report(config.EAGLE_REPO)
+    report = status.build_report(projects.repo_path(active_project() or ""))
 
     if os.environ.get("NOTIFY_STDOUT", "0") == "1":
         print(report)
@@ -24,7 +24,7 @@ def main():
         print(e, file=sys.stderr)
         return 1
     st.require("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID")
-    Telegram(st.bot_token).send(st.chat_id, report, header=host_header("EAGLE 状态报告"))
+    Telegram(st.bot_token).send(st.chat_id, report, header=host_header("状态报告"))
     return 0
 
 

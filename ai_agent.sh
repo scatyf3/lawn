@@ -10,20 +10,19 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NOTIFY="$HERE/bin/lawn-notify"
 
-# 解析 claude 二进制(优先级:CLAUDE_BIN > PATH 上的独立安装 > VS Code 扩展最新版)
-# 不写死扩展版本号,避免扩展自动更新后路径失效。
+# 解析 claude 二进制(优先级:CLAUDE_BIN > 常见独立安装 > PATH)。
 resolve_claude() {
   [ -n "${CLAUDE_BIN:-}" ] && { echo "$CLAUDE_BIN"; return; }
   local p
   for p in "$HOME/.local/bin/claude" "$HOME/.claude/local/claude"; do
     [ -x "$p" ] && { echo "$p"; return; }
   done
-  command -v claude 2>/dev/null && return
-  ls -dt /scratch/yf3005/.vscode*/.vscode-server/extensions/anthropic.claude-code-*/resources/native-binary/claude 2>/dev/null | head -1
+  command -v claude 2>/dev/null
 }
 CLAUDE="$(resolve_claude)"
-LOCK="$HOME/.cache/eagle-notify/ai_agent.lock"
-LOG_DIR="${EAGLE_REPO:-/scratch/yf3005/EAGLE_new}/logs"
+STATE_DIR="${LAWN_STATE_DIR:-$HOME/.cache/lawn}"
+LOCK="$STATE_DIR/ai_agent.lock"
+LOG_DIR="$STATE_DIR/agent-logs"
 TIMEOUT_SEC="${AI_TIMEOUT_SEC:-900}"
 
 chat="${1:?需要 chat_id}"; proj="${2:?需要项目名}"; workdir="${3:?需要工作目录}"; shift 3
@@ -32,6 +31,7 @@ instr="$*"
 
 send() { "$NOTIFY" "$1" >/dev/null 2>&1 || true; }
 
+mkdir -p "$STATE_DIR" "$LOG_DIR"
 exec 9>"$LOCK"
 if ! flock -n 9; then
   send "⚠️ 已有一个 agent 任务在跑,稍后再试(!ai 串行执行)。"

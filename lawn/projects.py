@@ -39,6 +39,12 @@ def exists(name, conf=None):
     return any(r["name"] == name for r in _rows(conf))
 
 
+def repo_path(name, conf=None):
+    """项目的基仓库目录(field path),供 status/tail 找 results/logs。无则 None。"""
+    row = get(name, conf)
+    return (row["path"] or None) if row else None
+
+
 def workdir(name, conf=None):
     """解析项目 -> 可用工作目录(必要时建 worktree)。
 

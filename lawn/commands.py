@@ -19,11 +19,16 @@ HELP = """指令:
 
 
 def active_project():
+    """当前项目:active 文件优先,否则取 projects 配置里的第一个;都没有返回 None。"""
     try:
         with open(config.ACTIVE_FILE, encoding="utf-8") as fh:
-            return fh.read().strip() or "eagle"
+            name = fh.read().strip()
+            if name:
+                return name
     except OSError:
-        return "eagle"
+        pass
+    names = projects.names()
+    return names[0] if names else None
 
 
 def _set_active(name):
@@ -49,11 +54,10 @@ def _tail(path, n=40):
         return ""
 
 
-def _launch_ai(chat, proj, wd, instr, repo):
+def _launch_ai(chat, proj, wd, instr):
     """后台跑 ai_agent.sh,脱离当前进程(setsid 等价),不阻塞轮询。"""
-    log_dir = os.path.join(repo, "logs")
-    os.makedirs(log_dir, exist_ok=True)
-    launch_log = open(os.path.join(log_dir, "ai_agent_launch.log"), "a")  # noqa: SIM115
+    os.makedirs(config.STATE_DIR, exist_ok=True)
+    launch_log = open(os.path.join(config.STATE_DIR, "ai_agent_launch.log"), "a")  # noqa: SIM115
     subprocess.Popen(
         ["bash", config.AI_AGENT_SH, chat, proj, wd, instr],
         stdout=launch_log, stderr=subprocess.STDOUT,
@@ -61,18 +65,22 @@ def _launch_ai(chat, proj, wd, instr, repo):
     )
 
 
-def handle(chat, text, tg, repo=None):
+def handle(chat, text, tg):
     """处理一条 ! 指令,通过 tg 回复到 chat。"""
-    repo = repo or config.EAGLE_REPO
     cmd, _, rest = text.partition(" ")
     rest = rest.strip()
 
     if cmd in ("!status", "!jobs"):
-        tg.send(chat, status.build_report(repo))
+        # results 取当前项目的基目录;Slurm/GPU 是全局的,repo 为 None 也能报
+        tg.send(chat, status.build_report(projects.repo_path(active_project() or "")))
 
     elif cmd == "!tail":
         if not JOBID_RE.match(rest):
             tg.send(chat, "用法: !tail <jobid>")
+            return
+        repo = projects.repo_path(active_project() or "")
+        if not repo:
+            tg.send(chat, "当前项目无 path,无法找日志")
             return
         log = _find_log(repo, rest)
         if not log:
@@ -110,7 +118,7 @@ def handle(chat, text, tg, repo=None):
         if err:
             tg.send(chat, f"无法解析项目 '{cur}': {err}")
             return
-        _launch_ai(chat, cur, wd, rest, repo)
+        _launch_ai(chat, cur, wd, rest)
 
     elif cmd == "!help":
         tg.send(chat, HELP)

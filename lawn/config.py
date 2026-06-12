@@ -6,12 +6,10 @@ import re
 PKG_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(PKG_DIR)
 
-ENV_FILE = os.environ.get("EAGLE_NOTIFY_ENV", os.path.expanduser("~/.config/eagle-notify.env"))
-PROJECTS_CONF = os.environ.get("PROJECTS_CONF", os.path.expanduser("~/.config/eagle-notify-projects.conf"))
-# !tail 找日志、report 找最新 results 的默认仓库目录
-EAGLE_REPO = os.environ.get("EAGLE_REPO", "/scratch/yf3005/EAGLE_new")
+ENV_FILE = os.environ.get("LAWN_ENV", os.path.expanduser("~/.config/lawn.env"))
+PROJECTS_CONF = os.environ.get("LAWN_PROJECTS", os.path.expanduser("~/.config/lawn-projects.conf"))
 
-STATE_DIR = os.path.expanduser("~/.cache/eagle-notify")
+STATE_DIR = os.environ.get("LAWN_STATE_DIR", os.path.expanduser("~/.cache/lawn"))
 OFFSET_FILE = os.path.join(STATE_DIR, "tg_offset")
 ACTIVE_FILE = os.path.join(STATE_DIR, "active_project")
 

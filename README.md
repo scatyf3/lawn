@@ -25,7 +25,7 @@ lawn/
 
 ## 配置
 
-1. `~/.config/eagle-notify.env`：
+1. `~/.config/lawn.env`：
 
    ```bash
    TELEGRAM_BOT_TOKEN="..."
@@ -33,13 +33,13 @@ lawn/
    TELEGRAM_ALLOWED_USER_ID="..."    # 只响应这些用户 ID(逗号分隔可多个)
    ```
 
-2. `~/.config/eagle-notify-projects.conf`：每行一个项目，`|` 分隔
+2. `~/.config/lawn-projects.conf`：每行一个项目，`|` 分隔
    `name | path | mode | worktree | branch`。`mode=inplace` 直接用 repo；
    否则按 worktree 模式（缺省 worktree=`<repo>_ai`、branch=`ai/<name>`，按需创建）。
+   `!status` / `!tail` / `!ai` 全部针对**当前项目**（`!use` 切换；缺省取配置第一行）。
 
 3. 可选环境变量：
-   - `EAGLE_REPO` — `!tail` 找日志、report 找最新 results 的默认仓库（默认 `/scratch/yf3005/EAGLE_new`）。
-   - `EAGLE_NOTIFY_ENV` / `PROJECTS_CONF` — 覆盖配置文件路径。
+   - `LAWN_ENV` / `LAWN_PROJECTS` / `LAWN_STATE_DIR` — 覆盖配置 / 状态目录路径。
    - `CLAUDE_BIN` / `AI_TIMEOUT_SEC` — ai_agent.sh 用：claude 二进制、单次超时(默认 900s)。
 
 ## 用法

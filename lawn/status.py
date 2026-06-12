@@ -6,8 +6,6 @@ import os
 import shutil
 import subprocess
 
-from . import config
-
 
 def _run(cmd):
     """跑命令取 stdout;任何失败都吞掉返回空串(尽力而为)。"""
@@ -47,6 +45,8 @@ def _gpu():
 
 
 def _latest_results(repo):
+    if not repo:
+        return ""
     dirs = sorted(glob.glob(os.path.join(repo, "results", "*", "")),
                   key=lambda p: os.path.getmtime(p), reverse=True)
     if not dirs:
@@ -68,6 +68,6 @@ def _latest_results(repo):
 
 
 def build_report(repo=None):
-    repo = repo or config.EAGLE_REPO
+    """汇总状态。repo 为当前项目基目录(取最新 results);为 None 时只报 Slurm/GPU。"""
     out = _slurm() + _gpu() + _latest_results(repo)
     return out if out else "(没有可报告的内容)"
