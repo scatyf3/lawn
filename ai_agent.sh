@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 在指定项目目录里跑 Claude Code 无头模式,把结果回复到 Telegram。
-# 由 poll_commands_tg.sh 在后台调用:
+# 由 lawn.commands(!ai)在后台调用:
 #   ai_agent.sh "<chat_id>" "<项目名>" "<工作目录>" "<指令文本>"
 #
 # 全权限(--dangerously-skip-permissions):agent 能跑任意命令。
@@ -8,7 +8,7 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-NOTIFY="$HERE/notify_telegram.sh"
+NOTIFY="$HERE/bin/lawn-notify"
 
 # 解析 claude 二进制(优先级:CLAUDE_BIN > PATH 上的独立安装 > VS Code 扩展最新版)
 # 不写死扩展版本号,避免扩展自动更新后路径失效。
@@ -23,7 +23,7 @@ resolve_claude() {
 }
 CLAUDE="$(resolve_claude)"
 LOCK="$HOME/.cache/eagle-notify/ai_agent.lock"
-LOG_DIR="/scratch/yf3005/EAGLE_new/logs"
+LOG_DIR="${EAGLE_REPO:-/scratch/yf3005/EAGLE_new}/logs"
 TIMEOUT_SEC="${AI_TIMEOUT_SEC:-900}"
 
 chat="${1:?需要 chat_id}"; proj="${2:?需要项目名}"; workdir="${3:?需要工作目录}"; shift 3

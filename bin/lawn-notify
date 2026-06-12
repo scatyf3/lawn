@@ -1,0 +1,10 @@
+#!/usr/bin/python3
+# 通用 Telegram 推送入口(系统 python,纯 stdlib)。
+#   lawn-notify "一行消息" | lawn-notify -t 标题 "消息" | echo 多行 | lawn-notify
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from lawn.notify import main  # noqa: E402
+
+raise SystemExit(main())

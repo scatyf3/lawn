@@ -1,0 +1,9 @@
+#!/usr/bin/python3
+# Telegram 轮询命令器入口。cron 每分钟调用此绝对路径(系统 python,纯 stdlib)。
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from lawn.poll import main  # noqa: E402
+
+raise SystemExit(main())
