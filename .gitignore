@@ -1,0 +1,9 @@
+# 本地状态 / 缓存
+*.log
+*.lock
+.cache/
+__pycache__/
+
+# 绝不提交密钥（脚本从 ~/.config/eagle-notify.env 读取）
+*.env
+eagle-notify*.conf
