@@ -65,6 +65,8 @@ bin/lawn-poll                        # 处理一批新消息(cron 每分钟)
 !help             指令列表
 ```
 
+完整命令参考(含命令行入口、例子、进度/ETA 说明)见 [COMMANDS.md](COMMANDS.md)。
+
 ## cron 示例
 
 cron 不走 login shell，务必用绝对路径的系统 python 入口：

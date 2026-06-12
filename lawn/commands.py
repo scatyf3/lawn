@@ -1,5 +1,6 @@
 """白名单指令分发。对应原 poll_commands_tg.sh 的 handle()。"""
 import glob
+import html
 import os
 import re
 import subprocess
@@ -8,14 +9,17 @@ from . import config, projects, status
 
 JOBID_RE = re.compile(r"^[0-9_]+$")
 
-HELP = """指令:
-!status | !jobs   状态
-!tail <jobid>     作业日志
-!projects         项目清单
-!use <项目>       切换项目
-!where            当前项目
-!ai <自然语言>    让 agent 改代码
-!help"""
+# HTML 格式(send 时带 parse_mode="HTML")。占位符尖括号要转义成 &lt;/&gt;。
+HELP = (
+    "<b>lawn 指令</b>\n"
+    "<code>!status</code> · <code>!jobs</code>  状态:Slurm 作业(含进度/ETA)+ GPU + 最新结果\n"
+    "<code>!tail &lt;jobid&gt;</code>  指定作业日志最后 40 行\n"
+    "<code>!projects</code>  列出可操作项目(★=当前)\n"
+    "<code>!use &lt;项目&gt;</code>  切换当前项目(worktree 模式按需创建隔离工作区)\n"
+    "<code>!where</code>  显示当前项目及其工作目录\n"
+    "<code>!ai &lt;自然语言&gt;</code>  在当前项目后台跑 Claude Code 改代码\n"
+    "<code>!help</code>  显示本帮助"
+)
 
 
 def active_project():
@@ -122,5 +126,8 @@ def handle(chat, text, tg):
         _launch_ai(chat, cur, wd, rest)
 
     elif cmd == "!help":
-        tg.send(chat, HELP)
-    # 其余非白名单指令:忽略
+        tg.send(chat, HELP, parse_mode="HTML")
+
+    else:  # 未知 ! 指令:回帮助(poll 已确保只有 ! 开头的消息进来)
+        tg.send(chat, f"未知指令 <code>{html.escape(cmd)}</code>\n\n{HELP}",
+                parse_mode="HTML")
