@@ -72,7 +72,8 @@ def handle(chat, text, tg):
 
     if cmd in ("!status", "!jobs"):
         # results 取当前项目的基目录;Slurm/GPU 是全局的,repo 为 None 也能报
-        tg.send(chat, status.build_report(projects.repo_path(active_project() or "")))
+        tg.send(chat, status.build_report(projects.repo_path(active_project() or "")),
+                parse_mode="HTML")
 
     elif cmd == "!tail":
         if not JOBID_RE.match(rest):

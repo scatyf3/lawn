@@ -1,10 +1,19 @@
-"""汇总 Slurm 作业 / GPU / 最新实验结果。对应原 report_status.sh。"""
+"""汇总 Slurm 作业 / GPU / 最新实验结果,产出适配 Telegram 的 HTML。
+
+输出用 HTML parse_mode 而非 Markdown:内容里大量 `_ . [ ] -`(文件名/作业号),
+MarkdownV2 要逐字符转义太脆;HTML 只需转义 `& < >`,稳得多。
+"""
 import getpass
 import glob
+import html
 import json
 import os
 import shutil
+import socket
 import subprocess
+import time
+
+from . import progress
 
 
 def _run(cmd):
@@ -20,14 +29,55 @@ def _round2(x):
     return round(x * 100) / 100 if isinstance(x, (int, float)) and not isinstance(x, bool) else "?"
 
 
-def _slurm():
+def _table(headers, rows):
+    """把行对齐成等宽表格(纯文本;放进 <pre> 前由 _pre 负责转义)。"""
+    grid = [list(map(str, headers))] + [list(map(str, r)) for r in rows]
+    widths = [max(len(row[i]) for row in grid) for i in range(len(headers))]
+    return "\n".join(
+        "  ".join(cell.ljust(widths[i]) for i, cell in enumerate(row)).rstrip()
+        for row in grid
+    )
+
+
+def _pre(table):
+    return f"<pre>{html.escape(table)}</pre>"
+
+
+def _header():
+    host = socket.gethostname().split(".")[0]
+    return f"🖥 <b>{html.escape(host)}</b> · {time.strftime('%m-%d %H:%M')}"
+
+
+def _slurm(repo=None):
     if not shutil.which("squeue"):
         return ""
-    jobs = _run(["squeue", "-u", getpass.getuser(), "-h",
-                 "-o", "%.10i %.9P %.20j %.2t %.10M"]).rstrip("\n")
-    if jobs:
-        return f"**Slurm 作业**\n```\n{jobs}\n```\n"
-    return "**Slurm 作业**: 当前无运行/排队作业\n"
+    # 用 | 分隔便于解析:JOBID|NAME|STATE|TIME
+    raw = _run(["squeue", "-u", getpass.getuser(), "-h", "-o", "%i|%j|%t|%M"]).strip()
+    if not raw:
+        return "📋 <b>Slurm</b> · 无作业"
+    rows = [ln.split("|") for ln in raw.splitlines() if ln]
+    running = sum(1 for r in rows if r[2] == "R")
+    pending = sum(1 for r in rows if r[2] == "PD")
+    other = len(rows) - running - pending
+    bits = []
+    if running:
+        bits.append(f"{running} ▶ running")
+    if pending:
+        bits.append(f"{pending} ⏳ pending")
+    if other:
+        bits.append(f"{other} · other")
+    summary = " · ".join(bits) or f"{len(rows)} 作业"
+    table_rows = []
+    for jobid, _name, st, tm in (r[:4] for r in rows):
+        prog = eta = "-"
+        if st == "R":                          # 只对运行中的作业读 log 估进度
+            p = progress.job_progress(repo, jobid)
+            if p:
+                done, total, eta = p
+                prog = f"{done}/{total}" if total else str(done)
+        table_rows.append([jobid, st, prog, eta, tm])
+    table = _table(["JOBID", "ST", "PROG", "ETA", "TIME"], table_rows)
+    return f"📋 <b>Slurm</b> · {summary}\n{_pre(table)}"
 
 
 def _gpu():
@@ -36,12 +86,14 @@ def _gpu():
     raw = _run(["nvidia-smi",
                 "--query-gpu=index,utilization.gpu,memory.used,memory.total",
                 "--format=csv,noheader,nounits"])
-    lines = []
+    rows = []
     for ln in raw.splitlines():
         f = [c.strip() for c in ln.split(",")]
         if len(f) >= 4:
-            lines.append(f"GPU{f[0]}: {f[1]}% {f[2]}/{f[3]}MiB")
-    return f"**GPU**\n```\n" + "\n".join(lines) + "\n```\n" if lines else ""
+            rows.append([f"GPU{f[0]}", f"{f[1]}%", f"{f[2]}/{f[3]} MiB"])
+    if not rows:
+        return ""
+    return f"🎮 <b>GPU</b>\n{_pre(_table(['GPU', 'UTIL', 'MEM'], rows))}"
 
 
 def _latest_results(repo):
@@ -51,23 +103,24 @@ def _latest_results(repo):
                   key=lambda p: os.path.getmtime(p), reverse=True)
     if not dirs:
         return ""
-    latest = dirs[0]
-    out = f"**最新结果** `{os.path.basename(latest.rstrip('/'))}`\n```\n"
-    for f in sorted(glob.glob(os.path.join(latest, "*.jsonl"))):
+    name = os.path.basename(dirs[0].rstrip("/"))
+    head = f"📊 <b>最新结果</b> · <code>{html.escape(name)}</code>"
+    rows = []
+    for f in sorted(glob.glob(os.path.join(dirs[0], "*.jsonl"))):
         tps = acc = "?"
         try:
             with open(f, encoding="utf-8") as fh:
-                last = fh.readlines()[-1]
-            d = json.loads(last)
+                d = json.loads(fh.readlines()[-1])
             tps, acc = _round2(d.get("tokens_per_s")), _round2(d.get("accept_length"))
         except Exception:  # noqa: BLE001
             pass
-        name = os.path.basename(f)[:-len(".jsonl")]
-        out += f"{name}: tps={tps}  accept={acc}\n"
-    return out + "```\n"
+        rows.append([os.path.basename(f)[:-len(".jsonl")][:30], str(tps), str(acc)])
+    if not rows:
+        return head
+    return f"{head}\n{_pre(_table(['FILE', 'TPS', 'ACCEPT'], rows))}"
 
 
 def build_report(repo=None):
-    """汇总状态。repo 为当前项目基目录(取最新 results);为 None 时只报 Slurm/GPU。"""
-    out = _slurm() + _gpu() + _latest_results(repo)
-    return out if out else "(没有可报告的内容)"
+    """汇总状态(HTML)。repo 为当前项目基目录(取最新 results);None 时只报 Slurm/GPU。"""
+    body = "\n\n".join(p for p in (_slurm(repo), _gpu(), _latest_results(repo)) if p)
+    return f"{_header()}\n\n{body}" if body else f"{_header()}\n\n（没有可报告的内容）"

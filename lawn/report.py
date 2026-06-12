@@ -8,14 +8,14 @@ import sys
 
 from . import config, projects, status
 from .commands import active_project
-from .telegram import Telegram, host_header
+from .telegram import Telegram, to_plain
 
 
 def main():
     report = status.build_report(projects.repo_path(active_project() or ""))
 
     if os.environ.get("NOTIFY_STDOUT", "0") == "1":
-        print(report)
+        print(to_plain(report))          # 终端不渲染 HTML,去标签更易读
         return 0
 
     try:
@@ -24,7 +24,7 @@ def main():
         print(e, file=sys.stderr)
         return 1
     st.require("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID")
-    Telegram(st.bot_token).send(st.chat_id, report, header=host_header("状态报告"))
+    Telegram(st.bot_token).send(st.chat_id, report, parse_mode="HTML")
     return 0
 
 

@@ -41,6 +41,9 @@ lawn/
 3. 可选环境变量：
    - `LAWN_ENV` / `LAWN_PROJECTS` / `LAWN_STATE_DIR` — 覆盖配置 / 状态目录路径。
    - `CLAUDE_BIN` / `AI_TIMEOUT_SEC` — ai_agent.sh 用：claude 二进制、单次超时(默认 900s)。
+   - `LAWN_TOTAL_RE` / `LAWN_DONE_RE` / `LAWN_DUR_RE` — 进度/ETA 的日志正则(纯正则、不调 AI)。
+     按作业号映射到 `logs/*<jobid>.log`，扫出 总数 / 完成数 / 每条耗时 估 ETA。
+     默认面向评测日志(`N prompts` / `steps, mean_accept` / `Xs, Y tok/s`),换项目时覆盖。
 
 ## 用法
 
@@ -53,7 +56,7 @@ bin/lawn-poll                        # 处理一批新消息(cron 每分钟)
 ## 白名单指令
 
 ```
-!status / !jobs   Slurm 作业 + GPU + 最新结果摘要
+!status / !jobs   Slurm 作业(含进度/ETA) + GPU + 最新结果摘要
 !tail <jobid>     该作业日志最后 40 行
 !projects         列出可操作项目，标出当前项目
 !use <项目>       切换当前项目(worktree 模式按需创建隔离工作区)
