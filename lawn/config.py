@@ -12,6 +12,8 @@ PROJECTS_CONF = os.environ.get("LAWN_PROJECTS", os.path.expanduser("~/.config/la
 STATE_DIR = os.environ.get("LAWN_STATE_DIR", os.path.expanduser("~/.cache/lawn"))
 OFFSET_FILE = os.path.join(STATE_DIR, "tg_offset")
 ACTIVE_FILE = os.path.join(STATE_DIR, "active_project")
+# 每个项目一个持久会话 id 存 SESSION_DIR/<项目>.id;ai_agent.sh 据此 --resume。
+SESSION_DIR = os.path.join(STATE_DIR, "sessions")
 
 # 动态项目发现:扫描这些根目录(冒号分隔)的直接子目录,把最近 SCAN_DAYS 天内
 # 有 git 提交的仓库自动登记为项目。静态 conf 同名优先。

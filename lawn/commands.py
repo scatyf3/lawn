@@ -16,10 +16,31 @@ HELP = (
     "<code>!tail &lt;jobid&gt;</code>  指定作业日志最后 40 行\n"
     "<code>!projects</code>  列出可操作项目(★=当前)\n"
     "<code>!use &lt;项目&gt;</code>  切换当前项目(worktree 模式按需创建隔离工作区)\n"
-    "<code>!where</code>  显示当前项目及其工作目录\n"
-    "<code>!ai &lt;自然语言&gt;</code>  在当前项目后台跑 Claude Code 改代码\n"
-    "<code>!help</code>  显示本帮助"
+    "<code>!where</code>  显示当前项目、工作目录、当前会话号\n"
+    "<code>!ai &lt;自然语言&gt;</code>  在当前项目后台跑 Claude Code 改代码(续接该项目会话)\n"
+    "<code>!reset</code>  重置当前项目会话,下次 !ai 开新对话\n"
+    "<code>!help</code>  显示本帮助\n"
+    "\n"
+    "<b>关于会话</b>\n"
+    "· 每个项目一段持续会话:连续 <code>!ai</code> 会记得上文,不必重复交代。\n"
+    "· <code>!use</code> 切项目 = 换成那个项目自己的独立会话。\n"
+    "· 想开新对话就 <code>!reset</code>;会话号(前 8 位)看 <code>!where</code>,"
+    "或每条 <code>!ai</code> 开头也会显示(🆕新 / 🧵续)。"
 )
+
+
+def _session_file(name):
+    return os.path.join(config.SESSION_DIR, f"{name}.id")
+
+
+def _session_short(name):
+    """当前项目会话 id 的前 8 位;无则 None。"""
+    try:
+        with open(_session_file(name), encoding="utf-8") as fh:
+            sid = fh.read().strip()
+            return sid[:8] if sid else None
+    except OSError:
+        return None
 
 
 def active_project():
@@ -112,7 +133,22 @@ def handle(chat, text, tg):
     elif cmd == "!where":
         cur = active_project()
         wd, _ = projects.workdir(cur)
-        tg.send(chat, f"当前项目: {cur}\n工作目录: {wd or '?'}")
+        sid = _session_short(cur or "")
+        sess = f"会话: {sid}(!ai 续接)" if sid else "会话: 无(下次 !ai 新建)"
+        tg.send(chat, f"当前项目: {cur}\n工作目录: {wd or '?'}\n{sess}")
+
+    elif cmd == "!reset":
+        cur = active_project()
+        if not cur:
+            tg.send(chat, "没有当前项目")
+            return
+        existed = _session_short(cur) is not None
+        try:
+            os.remove(_session_file(cur))
+        except OSError:
+            pass
+        tail = "" if existed else "(本就没有会话历史)"
+        tg.send(chat, f"🧹 已重置 [{cur}] 会话{tail}\n下次 !ai 将开新对话")
 
     elif cmd == "!ai":
         if not rest:

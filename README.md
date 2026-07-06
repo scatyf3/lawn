@@ -68,8 +68,9 @@ bin/lawn-poll                        # 处理一批新消息(cron 每分钟)
 !tail <jobid>     该作业日志最后 40 行
 !projects         列出可操作项目，标出当前项目
 !use <项目>       切换当前项目(worktree 模式按需创建隔离工作区)
-!where            显示当前项目及其工作目录
-!ai <自然语言>    在当前项目里跑 Claude Code 改代码(后台执行)
+!where            显示当前项目、工作目录、当前会话状态
+!ai <自然语言>    在当前项目里跑 Claude Code 改代码(后台执行,续接该项目会话)
+!reset            重置当前项目会话,下次 !ai 开新对话
 !help             指令列表
 ```
 
