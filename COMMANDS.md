@@ -59,7 +59,9 @@ cron 不走 login shell,务必用绝对路径调用(入口为系统 `/usr/bin/py
 |------|------|
 | `bin/lawn-poll` | 拉一批新消息并执行白名单指令(cron 每分钟) |
 | `bin/lawn-report` | 状态汇总 + 推送到 Telegram(可挂 cron 定时跑) |
+| `bin/lawn-watch` | 实验看护:刷新状态 + 汇总 + 异常自动修(cron 每 0.5hr) |
 | `bin/lawn-notify` | 通用 Telegram 推送 CLI |
+| `bin/lawn-sbatch` | 管理 sbatch 包装器:`install` / `uninstall` / `status` / `template` |
 
 ```bash
 bin/lawn-notify "一行消息"           # 或 -t 标题,或 echo 多行 | bin/lawn-notify
@@ -72,7 +74,15 @@ bin/lawn-poll                        # 处理一批新消息
 ```cron
 * * * * * /scratch/yf3005/lawn/bin/lawn-poll   >> /scratch/yf3005/lawn/cron.log 2>&1
 */30 * * * * /scratch/yf3005/lawn/bin/lawn-report >> /scratch/yf3005/lawn/cron.log 2>&1
+*/30 * * * * /scratch/yf3005/lawn/bin/lawn-watch  >> /scratch/yf3005/lawn/cron.log 2>&1
 ```
+
+## 实验登记与看护
+
+装 `bin/lawn-sbatch install` 后,任何终端/agent 的 `sbatch` 都会自动登记成实验文档
+(`~/.cache/lawn/experiments/<jobid>.json` + `.md`),`lawn-watch` 每 0.5hr 巡检并汇总,
+对非 smoke 的异常实验尝试自动修。在 sbatch 里用 `#EXP name/goal/config/smoke` 写元信息
+(`bin/lawn-sbatch template` 打印模板)。详见 [README](README.md#实验登记与看护)。
 
 ---
 
@@ -84,6 +94,11 @@ bin/lawn-poll                        # 处理一批新消息
 | `CLAUDE_BIN` / `AI_TIMEOUT_SEC` | `!ai` 用:claude 二进制、单次超时(默认 900s) |
 | `LAWN_TOTAL_RE` / `LAWN_DONE_RE` / `LAWN_DUR_RE` | 进度/ETA 的日志正则;换项目时覆盖,保持 project-driven |
 | `NOTIFY_STDOUT=1` | `lawn-report` 只打印不推送 |
+| `LAWN_SMOKE=1` | 标记本次 `sbatch` 为冒烟测试(不进看护/不自动修) |
+| `LAWN_NO_HOOK=1` | 让 sbatch 包装器这次直接透传,不登记 |
+| `LAWN_REAL_SBATCH` | 显式指定真 sbatch 路径(包装器找不到时) |
+| `LAWN_AUTOFIX=0` | 看护只通知、关闭自动修;`LAWN_FIX_MAX`(默认 1)调每个实验自动修次数上限 |
+| `LAWN_WATCH_TAIL` | 看护/自动修喂给 agent 的日志尾行数(默认 60) |
 
 进度正则默认值(面向评测日志):
 

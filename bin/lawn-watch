@@ -1,0 +1,9 @@
+#!/usr/bin/python3
+# 实验看护入口:刷新状态 + 每轮汇总 + 对异常实验尝试自动修。挂 cron 每 0.5hr 跑。
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from lawn.watch import main  # noqa: E402
+
+raise SystemExit(main())
