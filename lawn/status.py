@@ -15,9 +15,35 @@ import time
 
 from . import progress
 
+# cron / 无头环境不走 login shell,PATH 常只有 /usr/bin:/bin,缺 Slurm/CUDA 的 bin 目录,
+# 导致 which("squeue") 失败、Slurm 段被整段丢掉。这里在 PATH 之外再兜底找这些常见目录。
+# 需要时用 LAWN_EXTRA_PATH(冒号分隔)追加。
+_EXTRA_BIN = [
+    p for p in (
+        os.environ.get("LAWN_EXTRA_PATH", "").split(os.pathsep)
+        + ["/opt/slurm/bin", "/usr/local/bin", "/cm/shared/apps/slurm/current/bin"]
+    ) if p
+]
+
+
+def _which(name):
+    """先按 PATH 找,找不到再到 _EXTRA_BIN 里兜底,返回绝对路径或 None。"""
+    found = shutil.which(name)
+    if found:
+        return found
+    for d in _EXTRA_BIN:
+        cand = os.path.join(d, name)
+        if os.path.isfile(cand) and os.access(cand, os.X_OK):
+            return cand
+    return None
+
 
 def _run(cmd):
-    """跑命令取 stdout;任何失败都吞掉返回空串(尽力而为)。"""
+    """跑命令取 stdout;任何失败都吞掉返回空串(尽力而为)。
+    cmd[0] 是裸命令名时,先用 _which 解析成绝对路径,避免 PATH 缺目录跑不起来。"""
+    cmd = list(cmd)
+    if cmd and os.sep not in cmd[0]:
+        cmd[0] = _which(cmd[0]) or cmd[0]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
         return r.stdout if r.returncode == 0 else ""
@@ -49,7 +75,7 @@ def _header():
 
 
 def _slurm(repo=None):
-    if not shutil.which("squeue"):
+    if not _which("squeue"):
         return ""
     # 用 | 分隔便于解析:JOBID|NAME|STATE|TIME
     raw = _run(["squeue", "-u", getpass.getuser(), "-h", "-o", "%i|%j|%t|%M"]).strip()
@@ -81,7 +107,7 @@ def _slurm(repo=None):
 
 
 def _gpu():
-    if not shutil.which("nvidia-smi"):
+    if not _which("nvidia-smi"):
         return ""
     raw = _run(["nvidia-smi",
                 "--query-gpu=index,utilization.gpu,memory.used,memory.total",
