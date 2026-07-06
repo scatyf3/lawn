@@ -13,6 +13,16 @@ STATE_DIR = os.environ.get("LAWN_STATE_DIR", os.path.expanduser("~/.cache/lawn")
 OFFSET_FILE = os.path.join(STATE_DIR, "tg_offset")
 ACTIVE_FILE = os.path.join(STATE_DIR, "active_project")
 
+# 动态项目发现:扫描这些根目录(冒号分隔)的直接子目录,把最近 SCAN_DAYS 天内
+# 有 git 提交的仓库自动登记为项目。静态 conf 同名优先。
+# 缺省根 = lawn 仓库的父目录(通常是放各项目的公共目录),故默认即开启;
+# 设 LAWN_SCAN_ROOTS 覆盖,设为空串则关闭。
+SCAN_ROOTS = [
+    p for p in os.environ.get("LAWN_SCAN_ROOTS", os.path.dirname(ROOT)).split(os.pathsep) if p
+]
+SCAN_DAYS = int(os.environ.get("LAWN_SCAN_DAYS", "30"))
+SCAN_MODE = os.environ.get("LAWN_SCAN_MODE", "worktree")
+
 AI_AGENT_SH = os.path.join(ROOT, "ai_agent.sh")
 
 _ENV_RE = re.compile(r"^\s*(?:export\s+)?([A-Za-z_]\w*)=(.*)$")

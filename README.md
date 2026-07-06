@@ -38,8 +38,16 @@ lawn/
    否则按 worktree 模式（缺省 worktree=`<repo>_ai`、branch=`ai/<name>`，按需创建）。
    `!status` / `!tail` / `!ai` 全部针对**当前项目**（`!use` 切换；缺省取配置第一行）。
 
+   也可(默认即启用)靠**动态发现**免手写清单:扫描 `LAWN_SCAN_ROOTS` 里各根目录
+   的直接子目录,把最近 `LAWN_SCAN_DAYS`(默认 30)天内有 git 提交的仓库自动
+   登记(name=目录名,mode=`LAWN_SCAN_MODE`,默认 `worktree`)。`LAWN_SCAN_ROOTS`
+   缺省 = lawn 仓库的父目录(即放各项目的公共目录),设为空串可关闭。静态 conf 同名优先。
+   只认 `.git` 为真实目录的仓库,故自动排除 `<repo>_ai` 隔离工作区与 submodule。
+   上面的静态清单文件可完全不建,纯靠发现运行。
+
 3. 可选环境变量：
    - `LAWN_ENV` / `LAWN_PROJECTS` / `LAWN_STATE_DIR` — 覆盖配置 / 状态目录路径。
+   - `LAWN_SCAN_ROOTS`(冒号分隔) / `LAWN_SCAN_DAYS` / `LAWN_SCAN_MODE` — 动态项目发现(见上)。
    - `CLAUDE_BIN` / `AI_TIMEOUT_SEC` — ai_agent.sh 用：claude 二进制、单次超时(默认 900s)。
    - `LAWN_TOTAL_RE` / `LAWN_DONE_RE` / `LAWN_DUR_RE` — 进度/ETA 的日志正则(纯正则、不调 AI)。
      按作业号映射到 `logs/*<jobid>.log`，扫出 总数 / 完成数 / 每条耗时 估 ETA。
