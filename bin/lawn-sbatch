@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# 管理 sbatch 包装器(装/卸/查/看模板)。装 = 在 ~/.local/bin/sbatch 建符号链接
+# 指向本仓库的包装器,从而拦截所有终端/agent 的 sbatch 提交并登记实验。
+set -uo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"        # 仓库 bin/
+SHIM="$HERE/sbatch"
+TEMPLATE="$HERE/../templates/experiment.sbatch"
+TARGET="${LAWN_SBATCH_LINK:-$HOME/.local/bin/sbatch}"
+
+rp() { readlink -f "$1" 2>/dev/null || echo "$1"; }
+
+status() {
+  echo "包装器: $SHIM"
+  echo "链接点: $TARGET"
+  if [ -L "$TARGET" ] && [ "$(rp "$TARGET")" = "$(rp "$SHIM")" ]; then
+    echo "状态  : ✅ 已安装"
+  elif [ -e "$TARGET" ]; then
+    echo "状态  : ⚠️ $TARGET 已存在但不指向本包装器"
+  else
+    echo "状态  : 未安装"
+  fi
+  local resolved; resolved="$(command -v sbatch 2>/dev/null || true)"
+  echo "当前 sbatch 解析到: ${resolved:-（PATH 里没有）}"
+  if [ -n "$resolved" ] && [ "$(rp "$resolved")" != "$(rp "$SHIM")" ] && [ -L "$TARGET" ]; then
+    echo "⚠️ 有别的目录在 PATH 里更靠前,盖过了包装器 —— 拦截不会生效。"
+  fi
+}
+
+case "${1:-status}" in
+  install)
+    mkdir -p "$(dirname "$TARGET")"
+    if [ -e "$TARGET" ] && [ "$(rp "$TARGET")" != "$(rp "$SHIM")" ]; then
+      echo "❌ $TARGET 已存在且不是本包装器,先手动处理它再装。" >&2; exit 1
+    fi
+    ln -sfn "$SHIM" "$TARGET"
+    echo "✅ 已安装: $TARGET -> $SHIM"
+    echo
+    status
+    echo
+    echo "验证(不会真的提交): LAWN_REAL_SBATCH=/bin/true sbatch --help 之类请勿；"
+    echo "直接 'command -v sbatch' 应指向上面的链接。新开的 shell 才会生效。"
+    ;;
+  uninstall)
+    if [ -L "$TARGET" ] && [ "$(rp "$TARGET")" = "$(rp "$SHIM")" ]; then
+      rm -f "$TARGET"; echo "✅ 已卸载: $TARGET"
+    else
+      echo "跳过:$TARGET 不是本包装器的链接(不动它)。"
+    fi
+    ;;
+  status)   status ;;
+  template) cat "$TEMPLATE" ;;
+  *)
+    echo "用法: lawn-sbatch {install|uninstall|status|template}" >&2; exit 2 ;;
+esac

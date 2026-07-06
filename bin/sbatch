@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# lawn 的 sbatch 包装器。装到 ~/.local/bin/sbatch(在 PATH 里盖过真 sbatch)后,
+# 任何终端 / agent 跑 sbatch 都会经过这里:先原样调用真 sbatch,提交成功后再
+# 尽力登记一份实验文档。故障安全 —— 登记相关的任何失败都不影响提交,退出码原样透传。
+#
+# 关掉:bin/lawn-sbatch uninstall;或临时 LAWN_NO_HOOK=1 sbatch ...
+set -uo pipefail
+
+# 本文件真实路径(经符号链接解析),用于排除自身 + 定位登记脚本。
+self="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
+
+# —— 解析真 sbatch(务必在做任何别的事之前;这段必须稳) ——
+real=""
+if [ -n "${LAWN_REAL_SBATCH:-}" ] && [ -x "${LAWN_REAL_SBATCH:-}" ]; then
+  real="$LAWN_REAL_SBATCH"
+else
+  IFS=':' read -ra _dirs <<<"$PATH"
+  for d in "${_dirs[@]}" /opt/slurm/bin /usr/local/bin /cm/shared/apps/slurm/current/bin; do
+    c="$d/sbatch"
+    [ -x "$c" ] || continue
+    [ "$(readlink -f "$c" 2>/dev/null)" = "$self" ] && continue   # 别递归到自己
+    real="$c"; break
+  done
+fi
+if [ -z "$real" ]; then
+  echo "lawn-sbatch: 找不到真正的 sbatch(设 LAWN_REAL_SBATCH 指定)" >&2
+  exit 127
+fi
+
+# 显式关闭 hook:直接透传。
+if [ -n "${LAWN_NO_HOOK:-}" ]; then
+  exec "$real" "$@"
+fi
+
+# —— 跑真 sbatch,抓 stdout(sbatch 提交后立即返回,不会长跑) ——
+out="$("$real" "$@")"; rc=$?
+[ -n "$out" ] && printf '%s\n' "$out"
+
+# —— 仅在成功且解析到 jobid 时登记,全程 best-effort ——
+if [ "$rc" -eq 0 ]; then
+  jobid="$(printf '%s' "$out" | sed -n 's/.*Submitted batch job \([0-9][0-9]*\).*/\1/p' | head -1)"
+  reg="$(dirname "$self")/lawn-sbatch-register"
+  if [ -n "$jobid" ] && [ -x "$reg" ]; then
+    LAWN_JOBID="$jobid" LAWN_SUBMIT_CWD="$PWD" "$reg" "$@" >/dev/null 2>&1 || true
+  fi
+fi
+
+exit "$rc"

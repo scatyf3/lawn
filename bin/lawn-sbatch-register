@@ -1,0 +1,21 @@
+#!/usr/bin/python3
+# 由 sbatch 包装器调用:登记一条实验。参数 = 原始 sbatch 命令行;
+# 环境 LAWN_JOBID / LAWN_SUBMIT_CWD 传入作业号与提交目录。纯 best-effort。
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+jobid = os.environ.get("LAWN_JOBID", "").strip()
+cwd = os.environ.get("LAWN_SUBMIT_CWD") or os.getcwd()
+
+# LAWN_SMOKE 显式标记本次提交是否冒烟测试;未设则交给脚本/启发式判定。
+_sm = os.environ.get("LAWN_SMOKE")
+env_smoke = None if _sm is None else _sm.strip().lower() in ("1", "true", "yes", "y", "on")
+
+if jobid:
+    try:
+        from lawn import experiments  # noqa: E402
+        experiments.register(jobid, cwd, sys.argv[1:], env_smoke=env_smoke)
+    except Exception:  # noqa: BLE001  登记失败绝不影响已提交的作业
+        pass
