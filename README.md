@@ -112,7 +112,10 @@ bin/lawn-poll                        # 处理一批新消息(cron 每分钟)
    smoke/test/debug 或 `--time≤15min`)。smoke 实验照样登记,但不巡检、不自动修。
 
 3. **看护**(`bin/lawn-watch`,挂 cron 每 0.5hr):刷新每个实验的 Slurm 状态、对
-   运行中的非 smoke 实验开个小 agent 判断是否正常,推一份全量汇总到 Telegram。对
+   运行中的非 smoke 实验开个小 agent 判断是否正常,推一份**以实验为单位**的汇总到
+   Telegram —— 每个实验下面列出它的 squeue 子任务(数组作业各 task)的
+   **进度 N/总数 + ETA**(复用 `progress.py` 的日志正则),再附「未登记作业」与 GPU,
+   等于把原来 `lawn-report` 的进度展示并了进来(可据此不再单挂 report)。对
    **非 smoke 且判为异常**(卡住/报错,或以失败态结束)的实验**尝试自动修**
    (诊断 → 可 scancel+改+重投),默认**每个实验最多 1 次**,每步通知。
    `LAWN_FIX_MAX` 调次数,`LAWN_AUTOFIX=0` 整体关闭自动修(只通知)。
