@@ -4,6 +4,48 @@
 
 ---
 
+## 模块结构
+
+```
+lawn/
+  lawn/                  # 包(纯 stdlib)
+    config.py            # env / 路径常量 / Settings
+    telegram.py          # Bot API:发消息(分块) + 拉 updates(urllib)
+    projects.py          # 项目清单解析 + worktree 解析
+    status.py            # squeue / nvidia-smi / 最新 results 汇总
+    commands.py          # 白名单指令分发(!status/!tail/!ai...)
+    poll.py              # 轮询主体
+    experiments.py       # sbatch 实验登记:解析 #SBATCH/#EXP,写实验文档
+    watch.py             # 实验看护:刷新状态 + 汇总 + 异常自动修
+    notify.py / report.py# notify / report 的 main
+  bin/
+    lawn-poll            # cron 入口:轮询并执行指令
+    lawn-report          # cron 入口:状态汇总 + 推送
+    lawn-watch           # cron 入口(每 0.5hr):实验看护
+    lawn-notify          # CLI:通用 Telegram 推送
+    sbatch               # sbatch 包装器(装到 ~/.local/bin 拦截所有提交)
+    lawn-sbatch          # 管理包装器:install/uninstall/status/template
+    lawn-sbatch-register # 包装器内部调用:落盘实验文档
+  templates/
+    experiment.sbatch    # 实验模板:GPU/账号 + #EXP 目标/配置
+  ai_agent.sh            # 保留 bash:后台跑 Claude Code 无头模式(锁 + 隔离 + 会话)
+```
+
+## 项目配置
+
+`!status` / `!tail` / `!ai` 都针对**当前项目**(`!use` 切换;缺省取第一个)。项目来源两种,同名时静态优先:
+
+- **静态清单** `~/.config/lawn-projects.conf`:每行一个项目,`|` 分隔
+  `name | path | mode | worktree | branch`。`mode=inplace` 直接用 repo;否则按
+  worktree 模式(缺省 worktree=`<repo>_ai`、branch=`ai/<name>`,按需创建)。
+- **动态发现**(默认启用):扫描 `LAWN_SCAN_ROOTS`(缺省 = lawn 仓库父目录)各根目录的直接
+  子目录,把最近 `LAWN_SCAN_DAYS`(默认 30)天内有 git 提交的仓库自动登记
+  (name=目录名,mode=`LAWN_SCAN_MODE`,默认 `worktree`)。只认带 `.git` 的真实仓库,
+  故自动排除 `<repo>_ai` 隔离工作区与 submodule。`LAWN_SCAN_ROOTS` 设为空串可关闭;
+  静态清单可完全不建,纯靠发现运行。
+
+---
+
 ## Telegram 白名单指令
 
 在与 bot 的对话里发送,以 `!` 开头。只有 `~/.config/lawn.env` 里
@@ -91,6 +133,7 @@ bin/lawn-poll                        # 处理一批新消息
 | 变量 | 作用 |
 |------|------|
 | `LAWN_ENV` / `LAWN_PROJECTS` / `LAWN_STATE_DIR` | 覆盖配置 / 状态目录路径 |
+| `LAWN_SCAN_ROOTS`(冒号分隔) / `LAWN_SCAN_DAYS` / `LAWN_SCAN_MODE` | 动态项目发现(见「项目配置」);`LAWN_SCAN_ROOTS` 设空串关闭 |
 | `CLAUDE_BIN` / `AI_TIMEOUT_SEC` | `!ai` 用:claude 二进制、单次超时(默认 900s) |
 | `LAWN_TOTAL_RE` / `LAWN_DONE_RE` / `LAWN_DUR_RE` | 进度/ETA 的日志正则;换项目时覆盖,保持 project-driven |
 | `NOTIFY_STDOUT=1` | `lawn-report` 只打印不推送 |
