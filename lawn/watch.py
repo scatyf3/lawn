@@ -82,7 +82,9 @@ def _sacct_state(jid):
     if not status._which("sacct"):
         return ""
     raw = status._run(["sacct", "-j", str(jid), "-n", "-X", "-o", "State"])
-    states = {ln.strip().split()[0].lower() for ln in raw.splitlines() if ln.strip()}
+    # sacct 对「取消时仍在排队」的作业会吐出 "CANCELLED+"(末尾带 +),要去掉才能
+    # 命中下面的 cancelled 判断,否则该实验永远落不进 _TERMINAL,watch 会一直追踪。
+    states = {ln.strip().split()[0].lower().rstrip("+") for ln in raw.splitlines() if ln.strip()}
     if not states:
         return ""
     bad = states & _BAD_END
