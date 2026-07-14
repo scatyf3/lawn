@@ -1,0 +1,11 @@
+#!/usr/bin/python3
+# CPU 看护节点自愈入口:squeue 查上次申请的看护作业还在不在,不在就重新 sbatch
+# 一个(节点里紧凑轮询 lawn-watch)。挂 cron 每 10~15 分钟跑一次。
+# 需要 LAWN_CPU_ACCOUNT(必填);见 lawn/cpuwatch.py 顶部注释。
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from lawn.cpuwatch import main  # noqa: E402
+
+raise SystemExit(main())

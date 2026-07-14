@@ -17,11 +17,13 @@ lawn/
     poll.py              # 轮询主体
     experiments.py       # sbatch 实验登记:解析 #SBATCH/#EXP,写实验文档
     watch.py             # 实验看护:刷新状态 + 汇总 + 异常自动修
+    cpuwatch.py          # CPU 看护节点自愈:squeue 查还在不在,不在就重新 sbatch
     notify.py / report.py# notify / report 的 main
   bin/
     lawn-poll            # cron 入口:轮询并执行指令
     lawn-report          # cron 入口:状态汇总 + 推送
     lawn-watch           # cron 入口(每 0.5hr):实验看护
+    lawn-cpu-watch       # cron 入口(每 10~15min):CPU 看护节点自愈(见下)
     lawn-notify          # CLI:通用 Telegram 推送
     sbatch               # sbatch 包装器(装到 ~/.local/bin 拦截所有提交)
     lawn-sbatch          # 管理包装器:install/uninstall/status/template
@@ -102,6 +104,7 @@ cron 不走 login shell,务必用绝对路径调用(入口为系统 `/usr/bin/py
 | `bin/lawn-poll` | 拉一批新消息并执行白名单指令(cron 每分钟) |
 | `bin/lawn-report` | 状态汇总 + 推送到 Telegram(可挂 cron 定时跑) |
 | `bin/lawn-watch` | 实验看护:刷新状态 + 汇总 + 异常自动修(cron 每 0.5hr) |
+| `bin/lawn-cpu-watch` | CPU 看护节点自愈:不在就重新 sbatch 一个(cron 每 10~15min) |
 | `bin/lawn-notify` | 通用 Telegram 推送 CLI |
 | `bin/lawn-sbatch` | 管理 sbatch 包装器:`install` / `uninstall` / `status` / `template` |
 
@@ -124,7 +127,76 @@ bin/lawn-poll                        # 处理一批新消息
 装 `bin/lawn-sbatch install` 后,任何终端/agent 的 `sbatch` 都会自动登记成实验文档
 (`~/.cache/lawn/experiments/<jobid>.json` + `.md`),`lawn-watch` 每 0.5hr 巡检并汇总,
 对非 smoke 的异常实验尝试自动修。在 sbatch 里用 `#EXP name/goal/config/smoke` 写元信息
-(`bin/lawn-sbatch template` 打印模板)。详见 [README](README.md#实验登记与看护)。
+(`bin/lawn-sbatch template` 打印模板)。
+
+1. **装包装器**(在 `~/.local/bin/sbatch` 建链接,盖过真 sbatch):
+
+   ```bash
+   bin/lawn-sbatch install      # status 查看 / uninstall 卸载 / template 打印模板
+   ```
+
+   之后每次 `sbatch` 都会:先原样跑真 sbatch,提交成功再把实验写到
+   `~/.cache/lawn/experiments/<jobid>.json`(+ 人读 `.md`)。**故障安全**:登记相关的
+   任何错误都不影响提交,退出码原样透传;`LAWN_NO_HOOK=1 sbatch ...` 可临时绕过。
+
+2. **在 sbatch 里写实验元信息**(见 `templates/experiment.sbatch`)。除 `#SBATCH`
+   的 GPU/账号外,加几行 `#EXP`:
+
+   ```bash
+   #EXP name: 投机解码-温度扫描
+   #EXP goal: 验证 draft 温度 0.7 把接受长度提到 3.2 以上
+   #EXP config: model=llama3-8b temp=0.7 bs=16 dataset=mtbench
+   #EXP smoke: false          # true=冒烟测试,不进看护/不自动修
+   ```
+
+   **smoke 判定**优先级:`LAWN_SMOKE=1 sbatch ...` > `#EXP smoke:` > 启发式(名字含
+   smoke/test/debug 或 `--time≤15min`)。smoke 实验照样登记,但不巡检、不自动修。
+
+3. **看护**(`bin/lawn-watch`,挂 cron 每 0.5hr):刷新每个实验的 Slurm 状态、对
+   运行中的非 smoke 实验开个小 agent 判断是否正常,推一份**以实验为单位**的汇总到
+   Telegram —— 每个实验下面列出它的 squeue 子任务(数组作业各 task)的
+   **进度 N/总数 + ETA**(复用 `progress.py` 的日志正则),再附「未登记作业」与 GPU,
+   等于把原来 `lawn-report` 的进度展示并了进来(可据此不再单挂 report)。对
+   **非 smoke 且判为异常**(卡住/报错,或以失败态结束)的实验**尝试自动修**
+   (诊断 → 可 scancel+改+重投),默认**每个实验最多 1 次**,每步通知。
+   `LAWN_FIX_MAX` 调次数,`LAWN_AUTOFIX=0` 整体关闭自动修(只通知)。
+
+## CPU 看护节点
+
+不少超算/HPC 的登录节点其实是 k8s pod,根文件系统是本地临时盘,crontab 存在
+`/var/spool/cron`,pod 一重建这些本地状态就整个丢光 —— `lawn-watch` 挂的 cron
+也跟着消失,且没人自愈。判断方法:`systemctl status crond`(看启动时间)、
+`who -b` / `wtmp` 起始时间明显晚于预期,基本可以确认。
+
+解法是把高频轮询挪到一个持久的 Slurm CPU-only 分配上,不依赖登录节点:
+
+1. `bin/lawn-cpu-watch`(挂 cron 每 10~15min):查上次申请的看护作业(`squeue`)
+   还在不在(PENDING/RUNNING);不在就用 `LAWN_CPU_ACCOUNT` 等重新 `sbatch` 一个
+   (绕过 sbatch 包装器,不把自己登记成实验),记下新 jobid,发 Telegram 通知。
+   这一步本身仍靠登录节点 cron 调,但足够轻量(一次 squeue、顶多一次
+   sbatch),即使 crontab 又被清空也只是错过一次续期,不影响已经在跑的看护
+   节点在其 walltime 内继续工作。
+2. 看护节点里的循环:`timeout <walltime-2min> bash -c 'while true; do
+   lawn-watch; sleep $LAWN_CPU_INTERVAL; done'` —— 复用 `bin/lawn-watch`
+   原有逻辑(刷新状态 + 健康评估 + 自动修 + 推送),只是从 cron 每 0.5hr 一次
+   换成节点里更紧的轮询,且不再受登录节点影响。
+
+环境变量(建议写在 crontab 那一行前面,而不是 `~/.config/lawn.env`——换集群/
+换 account 时对应改这一行即可):
+
+| 变量 | 作用 |
+|------|------|
+| `LAWN_CPU_ACCOUNT` | 必填,Slurm account;不填直接报错,不瞎猜 |
+| `LAWN_CPU_PARTITION` | 默认 `cpu_short` |
+| `LAWN_CPU_TIME` | 默认 `05:45:00`(留量,别正好顶到 QoS 上限) |
+| `LAWN_CPU_INTERVAL` | 节点里两轮 `lawn-watch` 间的 sleep 秒数,默认 `300` |
+| `LAWN_CPU_JOB_NAME` | 默认 `lawn-cpu-watch` |
+
+```cron
+*/30 * * * * LAWN_CPU_ACCOUNT=<your-account> LAWN_CPU_INTERVAL=900 /path/to/lawn/bin/lawn-cpu-watch
+```
+
+(`VAR=val cmd` 写在同一行,变量只作用于这一个 job,不会污染上面几行。)
 
 ---
 
@@ -142,6 +214,9 @@ bin/lawn-poll                        # 处理一批新消息
 | `LAWN_REAL_SBATCH` | 显式指定真 sbatch 路径(包装器找不到时) |
 | `LAWN_AUTOFIX=0` | 看护只通知、关闭自动修;`LAWN_FIX_MAX`(默认 1)调每个实验自动修次数上限 |
 | `LAWN_WATCH_TAIL` | 看护/自动修喂给 agent 的日志尾行数(默认 60) |
+| `LAWN_CPU_ACCOUNT` | CPU 看护节点用的 Slurm account,必填(见上「CPU 看护节点」) |
+| `LAWN_CPU_PARTITION` / `LAWN_CPU_TIME` | CPU 看护节点的分区(默认 `cpu_short`)/ 时限(默认 `05:45:00`) |
+| `LAWN_CPU_INTERVAL` | CPU 看护节点里两轮 `lawn-watch` 间的 sleep 秒数,默认 300 |
 
 进度正则默认值(面向评测日志):
 
